@@ -1,0 +1,8 @@
+# VS Code workspace
+.vscode/
+
+# Ignore the tmp folder
+tmp/
+
+# Ignore logs in rclone-deploy
+rclone-deploy/log/

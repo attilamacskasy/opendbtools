@@ -1,8 +1,8 @@
 {
   "defaultSqlInstance": "",
   "backupPaths": {
-    "local": "C:\\OpenDBTools\\",
-    "remote": ""
+    "local": "backup",
+    "remote": "\\172.22.22.253\\backup\\opendbtools"
   },
   "excludeSystemDbs": true,
   "logging": {

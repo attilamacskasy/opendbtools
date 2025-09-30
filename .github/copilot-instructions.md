@@ -1,70 +1,67 @@
-# OpenDBTools - Copilot Instructions
+# OpenDBTools – Copilot Instructions
 
-## Project Overview
-OpenDBTools is an interactive PowerShell-based database backup and restore toolkit, starting with Microsoft SQL Server Express Edition support. The tool provides user-friendly database operations with intelligent authentication fallback and standardized logging.
+## Mission
+Build an interactive PowerShell tool to backup and restore Microsoft SQL Server databases (start with SQL Server Express, latest). It must prefer Windows/Kerberos authentication and fall back to SQL Auth (sa/username+password). It stores defaults in a JSON config, integrates the exact OpenIDSync logging module, and supports cross‑server restores. On startup, ask: "What do you want to do today? Backup or Restore?"
 
-## Core Design Principles
-- **Interactive PowerShell script**: User-driven menu system for backup/restore operations
-- **Smart authentication**: Windows Authentication (Kerberos) first, fallback to SQL Authentication with prompts
-- **Configuration-driven**: JSON config file stores default paths, settings, and preferences
-- **Cross-server capable**: Backup on one server, restore on another with same tool
-- **Standardized logging**: Integrates with existing logging library from OpenIDSync project
+## Core behaviors
+- Interactive UX with numeric menus (1, 2, 3…) and support for "*" to select all databases
+- Instance detection should be fast and robust: query running services/registry first; optionally WMI/SqlServer module
+- Authentication: try Windows Auth first; if connect fails, prompt for SQL Auth credentials; exit on repeated failure
+- Database list: show only user DBs by default; ask to include system DBs (default: no)
+- Config cache: persist defaults and last choices in `config.json`; offer reuse/update; avoid re-detection when unchanged
+- Backup naming: `[servername]-[dbinstancename]-[databasename]-[timestamp].bak` with timestamp `yyyyMMddTHHmmss`
+- Restore discovery: scan known locations from config; parse filenames; show readable table (Server, Instance, DB, Timestamp), newest first
+- Cross-server restore: allow choosing a different server/instance than backup origin
+- Logging: use `50_OpenIDSync_Logging.ps1` unchanged; log to console and file with INFO/WARN/ERROR/PROMPT/ACTION/RESULT/DEBUG
+- Failure policy: on any critical failure, write detailed log and exit
 
-## Project Structure
+## Project structure (target)
 ```
-├── OpenDBTools.ps1           # Main interactive script
-├── config.json               # Configuration file with defaults
-├── modules/
-│   ├── SqlServerModule.ps1   # SQL Server backup/restore functions
-│   ├── AuthModule.ps1        # Authentication handling
-│   └── LoggingModule.ps1     # Logging integration (from OpenIDSync)
-└── README.md
-```
-
-## Development Patterns
-- **Interactive menus**: Use numbered options (1, 2, 3...) and "*" for "all" selections
-- **Authentication flow**: Try Windows Auth first, prompt for SQL Auth on failure
-- **Database listing**: Show user databases only, exclude system DBs by default
-- **Cross-server support**: Same script works for backup source and restore destination
-- **Logging integration**: Use OpenIDSync logging patterns for consistency across projects
-
-## Configuration (config.json)
-```json
-{
-  "defaultSqlInstance": "localhost\\SQLEXPRESS",
-  "backupPaths": {
-    "local": "C:\\Backups\\",
-    "remote": "\\\\nas\\backups\\sql\\"
-  },
-  "excludeSystemDbs": true,
-  "logging": {
-    "level": "Information",
-    "logPath": "logs\\opendbtools.log"
-  }
-}
+OpenDBTools.ps1                # Main interactive script (entry point)
+config.json                    # Configuration cache and defaults
+modules/
+  AuthModule.ps1               # Instance discovery, authentication helpers
+  SqlServerModule.ps1          # DB list, backup, restore (uses Invoke-Sqlcmd)
+  50_OpenIDSync_Logging.ps1    # Copied verbatim from OpenIDSync (do not modify)
+README.md
 ```
 
-## Usage Flow
-```powershell
-# Start the interactive script
-.\OpenDBTools.ps1
+## Config contract (config.json)
+- defaultSqlInstance: string (e.g., "localhost\\SQLEXPRESS")
+- backupPaths: { local: string, remote: string }
+- knownBackupLocations: string[]
+- excludeSystemDbs: bool (default true)
+- logging: { level: string, logPath: string }
+- modulesChecked: { SqlServer: bool }
+- lastUsedSettings: { sqlInstance: string, operation: string, backupLocation: "local"|"remote" }
 
-# User selects: 1) Backup or 2) Restore
-# Script discovers SQL instances and databases
-# User selects databases (1, 2, 3 or * for all)
-# Operations execute with progress feedback
-```
+Behavior:
+- On first run, create missing keys with sensible defaults; prompt to fill blanks.
+- After checking/installing required modules (SqlServer), set `modulesChecked.SqlServer = true`.
 
-## SQL Server Implementation Details
-- **Connection**: Use `Invoke-Sqlcmd` PowerShell module for database operations
-- **Authentication**: Windows Authentication via current user context, fallback to SQL Authentication
-- **Backup commands**: Generate T-SQL BACKUP DATABASE statements with compression
-- **Instance discovery**: Query WMI or registry for SQL Server instances
-- **Database enumeration**: Exclude system databases (master, model, msdb, tempdb) unless explicitly requested
+## Implementation notes
+- Use `Invoke-Sqlcmd` from the SqlServer module for queries and backup/restore T-SQL
+- Instance detection: prefer reading `HKLM:\SOFTWARE\Microsoft\Microsoft SQL Server\Instance Names\SQL` and/or service names like `MSSQL$<Instance>`; cache result
+- Exclude system DBs unless explicitly requested (master, model, msdb, tempdb)
+- Backup with compression; ensure SQL service account can access target paths
+- Parse backup filenames for restore list; sort by timestamp desc
+- Always write clear ACTION/RESULT/ERROR logs; include key context in `-Data` hashtables for structured logging
 
-## Security & Best Practices
-- **Credential handling**: Prompt for SQL Auth credentials, don't store in config
-- **File permissions**: Ensure backup locations are accessible to SQL Server service account  
-- **Validation**: Verify backup file integrity after creation
-- **Error handling**: Use structured logging with correlation IDs for troubleshooting
-- **Cross-platform**: Support UNC paths for network backup storage (NAS/file shares)
+## Startup flow
+1) Initialize logging (file path from config)
+2) Ensure SqlServer module exists; install if missing; update config
+3) Load or detect SQL instance(s); present choices (use cache if available)
+4) Ask: Backup or Restore
+5) Authenticate: try Windows; fallback to SQL Auth prompt
+6) Execute chosen operation with progress and validation
+
+## Security
+- Never store SQL passwords in config; only collect via `Get-Credential`
+- Validate path access and fail fast with actionable logs
+
+## Definition of done (MVP)
+- Scripts run locally on a SQL Server machine
+- Backup: select DB(s) by index or `*`, create `.bak` with naming convention in local/remote paths
+- Restore: detect `.bak` files, parse metadata, present newest-first table, restore selected DB to chosen instance
+- Logging module is copied unchanged
+- On failure, log and exit
