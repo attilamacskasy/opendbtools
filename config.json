@@ -1,0 +1,20 @@
+{
+  "defaultSqlInstance": "",
+  "backupPaths": {
+    "local": "C:\\OpenDBTools\\",
+    "remote": ""
+  },
+  "excludeSystemDbs": true,
+  "logging": {
+    "level": "Information",
+    "logPath": "logs\\opendbtools.log"
+  },
+  "modulesChecked": {
+    "SqlServer": false
+  },
+  "lastUsedSettings": {
+    "sqlInstance": "",
+    "operation": "",
+    "backupLocation": "local"
+  }
+}
